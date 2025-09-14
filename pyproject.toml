@@ -1,0 +1,35 @@
+[project]
+name = "visju-app"
+version = "0.1.0"
+description = "Application to record, transcribe, and analyze conversations about Vidarshov Gård farm history"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.11.9",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic-settings>=2.0.0",
+    "sqlalchemy>=2.0.0",
+    "logfire>=0.1.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.23.0",
+    "pydub>=0.25.0",
+    "mutagen>=1.47.0",
+    "transformers>=4.35.0",
+    "torch>=2.1.0",
+    "sentence-transformers>=2.2.0",
+    "reportlab>=4.0.0",
+    "jinja2>=3.1.0",
+    "watchdog>=3.0.0",
+    "aiofiles>=23.0.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.24.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+]

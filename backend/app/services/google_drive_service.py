@@ -123,6 +123,139 @@ class GoogleDriveService:
                 "folder_id": target_folder_id
             }
 
+    def list_audio_files(self, folder_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List audio files in the specified folder."""
+        if not self.service:
+            logger.error("Service not authenticated")
+            return []
+
+        target_folder_id = folder_id or settings.GOOGLE_DRIVE_FOLDER_ID
+        if not target_folder_id:
+            logger.error("No folder ID provided")
+            return []
+
+        try:
+            # Query for audio files (M4A, MP3, WAV)
+            audio_mime_types = [
+                "audio/mp4",
+                "audio/mpeg",
+                "audio/wav",
+                "audio/x-m4a"
+            ]
+
+            mime_query = " or ".join([f"mimeType='{mime}'" for mime in audio_mime_types])
+            query = f"'{target_folder_id}' in parents and ({mime_query})"
+
+            results = self.service.files().list(
+                q=query,
+                pageSize=100,
+                fields="files(id,name,mimeType,size,modifiedTime,createdTime,parents)"
+            ).execute()
+
+            files = results.get('files', [])
+            logger.info(f"Found {len(files)} audio files in folder")
+
+            return files
+
+        except HttpError as e:
+            logger.error(f"Error listing audio files: {e}")
+            return []
+
+    def get_file_metadata(self, file_id: str) -> Optional[Dict[str, Any]]:
+        """Get detailed metadata for a specific file."""
+        if not self.service:
+            logger.error("Service not authenticated")
+            return None
+
+        try:
+            file_metadata = self.service.files().get(
+                fileId=file_id,
+                fields="id,name,mimeType,size,modifiedTime,createdTime,parents,webViewLink"
+            ).execute()
+
+            logger.info(f"Retrieved metadata for file: {file_metadata.get('name')}")
+            return file_metadata
+
+        except HttpError as e:
+            logger.error(f"Error getting file metadata for {file_id}: {e}")
+            return None
+
+    def download_file(self, file_id: str, local_path: str) -> bool:
+        """Download a file from Google Drive to local storage."""
+        if not self.service:
+            logger.error("Service not authenticated")
+            return False
+
+        try:
+            # Get file metadata first
+            file_metadata = self.get_file_metadata(file_id)
+            if not file_metadata:
+                return False
+
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+            # Download file
+            request = self.service.files().get_media(fileId=file_id)
+
+            with open(local_path, 'wb') as local_file:
+                from googleapiclient.http import MediaIoBaseDownload
+                downloader = MediaIoBaseDownload(local_file, request)
+
+                done = False
+                while done is False:
+                    status, done = downloader.next_chunk()
+                    if status:
+                        logger.info(f"Download progress: {int(status.progress() * 100)}%")
+
+            logger.info(f"Successfully downloaded {file_metadata.get('name')} to {local_path}")
+            return True
+
+        except HttpError as e:
+            logger.error(f"Error downloading file {file_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error downloading file {file_id}: {e}")
+            return False
+
+    def monitor_folder_changes(self, folder_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Check for new or modified audio files since last check."""
+        if not self.service:
+            logger.error("Service not authenticated")
+            return []
+
+        target_folder_id = folder_id or settings.GOOGLE_DRIVE_FOLDER_ID
+        if not target_folder_id:
+            logger.error("No folder ID provided")
+            return []
+
+        try:
+            # Get current list of files
+            current_files = self.list_audio_files(target_folder_id)
+
+            # For now, return all files (in a real implementation, you'd compare with stored state)
+            new_files = []
+            for file_info in current_files:
+                # Check if file is "new" based on some criteria
+                # This is a simplified version - you'd want to track last_checked timestamp
+                new_files.append({
+                    'id': file_info['id'],
+                    'name': file_info['name'],
+                    'size': int(file_info.get('size', 0)),
+                    'mimeType': file_info['mimeType'],
+                    'modifiedTime': file_info['modifiedTime'],
+                    'createdTime': file_info['createdTime']
+                })
+
+            if new_files:
+                logger.info(f"Found {len(new_files)} files to process")
+
+            return new_files
+
+        except HttpError as e:
+            logger.error(f"Error monitoring folder changes: {e}")
+            return []
+
 def get_drive_service() -> GoogleDriveService:
     """Get a configured Google Drive service instance."""
     service = GoogleDriveService()

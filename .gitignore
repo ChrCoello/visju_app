@@ -209,3 +209,4 @@ __marimo__/
 # Specific
 **/.env*
 **/secrets*
+**/audio_files/*

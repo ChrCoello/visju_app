@@ -22,29 +22,30 @@
 - [x] Create database connection and session management
 
 ### 1.3 Google Drive API Integration
-- [ ] Set up Google Drive API credentials and authentication
-- [ ] Create Google Drive client service
-- [ ] Implement folder monitoring functionality
-- [ ] Create file detection and metadata extraction
-- [ ] Implement file download from Google Drive
-- [ ] Set up file completion detection (avoid partial uploads)
-- [ ] Create AudioFile Pydantic model and database operations
+- [x] Set up Google Drive API credentials and authentication
+- [x] Create Google Drive client service
+- [x] Implement folder monitoring functionality
+- [x] Create file detection and metadata extraction
+- [x] Implement file download from Google Drive
+- [x] Set up file completion detection (avoid partial uploads)
+- [x] Create AudioFile Pydantic model and database operations
 
-### 1.4 File Monitoring and Download
-- [ ] Implement watchdog-based file monitoring system
-- [ ] Create file queue management with FastAPI background tasks
-- [ ] Set up local file storage structure
-- [ ] Implement file integrity validation
-- [ ] Create file status tracking and updates
-- [ ] Add error handling and retry mechanisms for downloads
+### 1.4 File Synchronization and Storage
+- [x] Set up local file storage structure
+- [x] Check files on Google Drive
+- [x] Check files in local storage
+- [x] Compare Drive vs local files and identify differences
+- [x] Download missing files from Drive to local storage
+- [x] Create file integrity validation
+- [x] Add error handling and retry mechanisms for downloads
 
 ### 1.5 Basic Audio Conversion
-- [ ] Set up Pydub and FFmpeg dependencies
-- [ ] Implement M4A to WAV conversion functionality
-- [ ] Create audio metadata extraction with mutagen
-- [ ] Set up file path management for original and converted files
-- [ ] Implement conversion validation and error handling
-- [ ] Create ConversionResult model and database operations
+- [x] Set up Pydub and FFmpeg dependencies
+- [x] Implement M4A to WAV conversion functionality
+- [x] Create audio metadata extraction with mutagen
+- [x] Set up file path management for original and converted files
+- [x] Implement conversion validation and error handling
+- [x] Create ConversionResult model and database operations
 
 ## Phase 2: Transcription Pipeline (Week 3-4)
 

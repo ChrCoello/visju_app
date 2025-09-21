@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./vidarshov.db"
     
     # Google Drive API Configuration
-    GOOGLE_DRIVE_CREDENTIALS_PATH: str = "./credentials.json"
+    GOOGLE_DRIVE_CREDENTIALS_PATH: str = "./secrets/credentials.json"
     GOOGLE_DRIVE_FOLDER_ID: Optional[str] = None
     
     # LLM Configuration

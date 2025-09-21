@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Integer, Text, JSON, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -14,10 +14,10 @@ class Session(Base):
     converted_path = Column(String, nullable=True)
     upload_timestamp = Column(DateTime, nullable=True)
     processing_status = Column(String, default="detected")
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
-    metadata_session = relationship("SessionMetadata", back_populates="session", uselist=False)
+    session_metadata = relationship("SessionMetadata", back_populates="session", uselist=False)
     transcript = relationship("Transcript", back_populates="session", uselist=False)
     tags = relationship("Tag", back_populates="session")
     summary = relationship("Summary", back_populates="session", uselist=False)
@@ -33,10 +33,10 @@ class SessionMetadata(Base):
     location_notes = Column(Text, nullable=True)
     session_notes = Column(Text, nullable=True)
     date = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationship
-    session = relationship("Session", back_populates="metadata")
+    session = relationship("Session", back_populates="session_metadata")
 
 
 class Transcript(Base):
@@ -49,7 +49,7 @@ class Transcript(Base):
     language = Column(String, default="nb")
     model_version = Column(String, nullable=True)
     processing_duration_ms = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationship
     session = relationship("Session", back_populates="transcript")
@@ -65,7 +65,7 @@ class Tag(Base):
     confidence = Column(Float, nullable=True)
     context = Column(Text, nullable=True)
     extraction_model = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationship
     session = relationship("Session", back_populates="tags")
@@ -81,7 +81,26 @@ class Summary(Base):
     questions_raised = Column(JSON, nullable=True)
     related_sessions = Column(JSON, nullable=True)
     processing_model = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationship
     session = relationship("Session", back_populates="summary")
+
+
+class AudioFile(Base):
+    __tablename__ = "audio_files"
+
+    id = Column(String, primary_key=True)
+    drive_id = Column(String, unique=True, nullable=False)
+    filename = Column(String, nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    upload_timestamp = Column(DateTime, nullable=True)
+    status = Column(String, default="detected")
+    local_path = Column(String, nullable=True)
+    mime_type = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    modified_time = Column(DateTime, nullable=True)
+
+    # Processing status: detected, downloading, downloaded, processing, complete, error
+    processing_status = Column(String, default="detected")
+    error_message = Column(Text, nullable=True)

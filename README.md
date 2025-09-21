@@ -1,2 +1,84 @@
-# visju_app
-Application aorund Vidarshov history
+# Vidarshov Gård Recording App
+
+Application to record, transcribe, and analyze conversations about Vidarshov Gård farm history in Ridabu, Norway.
+
+## Features
+
+- **Google Drive Integration**: Automatic sync of M4A audio files from Easy Voice Recorder
+- **Audio Conversion**: M4A to WAV conversion optimized for Norwegian speech recognition
+- **File Synchronization**: Smart comparison and download of missing files
+- **Audio Processing**: Metadata extraction and format validation
+
+## API Usage
+
+### File Synchronization
+
+Check current synchronization status:
+```bash
+curl http://localhost:8000/api/v1/sync/status
+```
+
+Download missing files from Google Drive:
+```bash
+curl -X POST http://localhost:8000/api/v1/sync/download-missing
+```
+
+Perform full synchronization:
+```bash
+curl -X POST http://localhost:8000/api/v1/sync/full-sync
+```
+
+Get local storage statistics:
+```bash
+curl http://localhost:8000/api/v1/sync/storage-stats
+```
+
+### Audio Conversion
+
+Check conversion dependencies:
+```bash
+curl http://localhost:8000/api/v1/conversion/dependencies
+```
+
+Get conversion status and statistics:
+```bash
+curl http://localhost:8000/api/v1/conversion/status
+```
+
+Convert a specific file:
+```bash
+curl -X POST http://localhost:8000/api/v1/conversion/convert/filename.m4a
+```
+
+Convert all files in batch:
+```bash
+curl -X POST http://localhost:8000/api/v1/conversion/convert-all
+```
+
+Get file metadata:
+```bash
+curl http://localhost:8000/api/v1/conversion/metadata/filename.m4a
+```
+
+## Development
+
+### Setup
+```bash
+# Install dependencies
+uv pip install -e .
+
+# Run the application
+cd backend && uv run uvicorn main:app --reload
+
+# Run tests
+uv run pytest
+```
+
+### Environment Configuration
+Required environment variables in `backend/.env`:
+```
+GOOGLE_DRIVE_CREDENTIALS_PATH=secrets/credentials.json
+GOOGLE_DRIVE_FOLDER_ID=your_drive_folder_id
+AUDIO_STORAGE_PATH=./audio_files/
+TEMP_PROCESSING_PATH=./temp/
+```

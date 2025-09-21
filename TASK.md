@@ -40,12 +40,12 @@
 - [x] Add error handling and retry mechanisms for downloads
 
 ### 1.5 Basic Audio Conversion
-- [ ] Set up Pydub and FFmpeg dependencies
-- [ ] Implement M4A to WAV conversion functionality
-- [ ] Create audio metadata extraction with mutagen
-- [ ] Set up file path management for original and converted files
-- [ ] Implement conversion validation and error handling
-- [ ] Create ConversionResult model and database operations
+- [x] Set up Pydub and FFmpeg dependencies
+- [x] Implement M4A to WAV conversion functionality
+- [x] Create audio metadata extraction with mutagen
+- [x] Set up file path management for original and converted files
+- [x] Implement conversion validation and error handling
+- [x] Create ConversionResult model and database operations
 
 ## Phase 2: Transcription Pipeline (Week 3-4)
 

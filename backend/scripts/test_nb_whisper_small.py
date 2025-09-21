@@ -4,7 +4,6 @@ Test script for NB-Whisper small model with actual audio transcription.
 """
 
 import sys
-import os
 sys.path.append('.')
 
 import torch
@@ -41,7 +40,7 @@ def main():
         # Load model
         model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_id,
-            torch_dtype=torch_dtype,
+            dtype=torch_dtype,
             low_cpu_mem_usage=True,
             use_safetensors=True
         )
@@ -63,7 +62,7 @@ def main():
             chunk_length_s=30,
             batch_size=16,
             return_timestamps=True,
-            torch_dtype=torch_dtype,
+            dtype=torch_dtype,
             device=device,
         )
 

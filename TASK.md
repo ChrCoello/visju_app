@@ -22,13 +22,13 @@
 - [x] Create database connection and session management
 
 ### 1.3 Google Drive API Integration
-- [ ] Set up Google Drive API credentials and authentication
-- [ ] Create Google Drive client service
-- [ ] Implement folder monitoring functionality
-- [ ] Create file detection and metadata extraction
-- [ ] Implement file download from Google Drive
-- [ ] Set up file completion detection (avoid partial uploads)
-- [ ] Create AudioFile Pydantic model and database operations
+- [x] Set up Google Drive API credentials and authentication
+- [x] Create Google Drive client service
+- [x] Implement folder monitoring functionality
+- [x] Create file detection and metadata extraction
+- [x] Implement file download from Google Drive
+- [x] Set up file completion detection (avoid partial uploads)
+- [x] Create AudioFile Pydantic model and database operations
 
 ### 1.4 File Monitoring and Download
 - [ ] Implement watchdog-based file monitoring system

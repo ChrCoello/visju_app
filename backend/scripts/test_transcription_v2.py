@@ -8,7 +8,7 @@ import os
 sys.path.append('.')
 
 from pathlib import Path
-from app.services.transcription_service_v2 import TranscriptionService
+from app.services.transcription_service import TranscriptionService
 from app.core.logging import configure_logging, get_logger
 
 def main():

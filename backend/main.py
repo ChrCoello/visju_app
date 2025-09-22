@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 
 from app.api import router as api_router
 from app.core.config import settings
@@ -39,10 +42,26 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api/v1")
 
-@app.get("/")
-async def root():
+# Mount static files
+app.mount("/static", StaticFiles(directory="../frontend/static"), name="static")
+
+# Set up templates
+templates = Jinja2Templates(directory="../frontend/templates")
+
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
     logger.info("Root endpoint accessed")
-    return {"message": "Vidarshov Gård Recording App API"}
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/sessions", response_class=HTMLResponse)
+async def sessions_view(request: Request):
+    logger.info("Sessions view accessed")
+    return templates.TemplateResponse("sessions.html", {"request": request})
+
+@app.get("/sessions/{session_id}", response_class=HTMLResponse)
+async def session_detail_view(request: Request, session_id: str):
+    logger.info(f"Session detail view accessed for: {session_id}")
+    return templates.TemplateResponse("session_detail.html", {"request": request, "session_id": session_id})
 
 @app.get("/health")
 async def health_check():

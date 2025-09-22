@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Vidarshov Gård Recording App - Home{% endblock %}
+
+{% block content %}
+<div style="text-align: center; max-width: 600px; margin: 0 auto;">
+    <h2>Welcome to Vidarshov Gård Historical Recording System</h2>
+
+    <p style="font-size: 1.1rem; line-height: 1.8; margin: 2rem 0; color: #555;">
+        This application helps preserve and analyze conversations about the history of
+        Vidarshov Gård farm in Ridabu, Norway. Audio recordings are automatically
+        transcribed using Norwegian language processing.
+    </p>
+
+    <div style="margin: 3rem 0;">
+        <a href="/sessions" class="btn" style="font-size: 1.1rem; padding: 15px 30px;">
+            📻 View Recording Sessions
+        </a>
+    </div>
+
+    <div style="background: #f8f9fa; padding: 2rem; border-radius: 8px; margin-top: 3rem;">
+        <h3 style="color: #2c3e50; margin-bottom: 1rem;">System Features</h3>
+        <ul style="text-align: left; max-width: 400px; margin: 0 auto;">
+            <li style="margin-bottom: 0.5rem;">🔄 Automatic Google Drive synchronization</li>
+            <li style="margin-bottom: 0.5rem;">🎵 M4A to WAV audio conversion</li>
+            <li style="margin-bottom: 0.5rem;">🇳🇴 Norwegian language transcription</li>
+            <li style="margin-bottom: 0.5rem;">📝 Timestamped transcript segments</li>
+            <li style="margin-bottom: 0.5rem;">🔍 Full-text search capabilities</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

@@ -49,6 +49,11 @@ class Transcript(Base):
     language = Column(String, default="nb")
     model_version = Column(String, nullable=True)
     processing_duration_ms = Column(Integer, nullable=True)
+    # Speaker detection fields
+    has_speakers = Column(String, default="false")  # "true", "false", "unknown"
+    speaker_separation_method = Column(String, nullable=True)  # "stereo_channels", "diarization", "manual"
+    speakers_detected = Column(Integer, default=1)  # Number of speakers detected
+    speaker_info = Column(JSON, nullable=True)  # Speaker metadata and channel assignments
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationship

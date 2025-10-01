@@ -22,25 +22,6 @@ async def get_conversion_status() -> Dict[str, Any]:
         logger.error(f"Error getting conversion status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/dependencies")
-async def check_dependencies() -> Dict[str, Any]:
-    """Check if required dependencies (Pydub, Mutagen, FFmpeg) are available."""
-    try:
-        conversion_service = AudioConversionService()
-        deps = conversion_service.check_dependencies()
-
-        missing_deps = [name for name, available in deps.items() if not available]
-
-        return {
-            "status": "success",
-            "dependencies": deps,
-            "all_available": len(missing_deps) == 0,
-            "missing": missing_deps
-        }
-
-    except Exception as e:
-        logger.error(f"Error checking dependencies: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/convert/{filename}")
 async def convert_single_file(filename: str) -> Dict[str, Any]:

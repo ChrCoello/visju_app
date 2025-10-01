@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
     
     # Database Configuration
-    DATABASE_URL: str = "sqlite:///./vidarshov.db"
+    DATABASE_URL: str = "sqlite:///./db/vidarshov.db"
     
     # Google Drive API Configuration
     GOOGLE_DRIVE_CREDENTIALS_PATH: str = "./secrets/credentials.json"

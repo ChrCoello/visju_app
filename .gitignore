@@ -210,4 +210,4 @@ __marimo__/
 **/.env*
 **/secrets*
 **/audio_files/*
-**/backend/db/*
+backend/db/

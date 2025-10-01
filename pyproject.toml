@@ -23,6 +23,7 @@ dependencies = [
     "watchdog>=3.0.0",
     "aiofiles>=23.0.0",
     "librosa>=0.10.0",
+    "pyannote.audio>=3.0.0",
 ]
 
 [tool.uv]

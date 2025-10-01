@@ -73,10 +73,16 @@ class SpeakerAwareTranscriptionService:
         self.correlation_threshold = 0.6  # Below this = different speakers
         self.energy_ratio_threshold = 1.5  # Above this = significant channel difference
 
+        # Energy ratio filtering settings
+        self.use_energy_filtering = True  # Enable Method 3: Energy Ratio Filtering
+        self.energy_ratio_gate_threshold = 2.0  # Ratio threshold for channel selection
+        self.filter_window_ms = 100  # Window size for energy calculation (100ms)
+
         self.model = None
         self.processor = None
 
         logger.info(f"SpeakerAwareTranscriptionService initialized with device: {self.device}")
+        logger.info(f"Energy ratio filtering: {'enabled' if self.use_energy_filtering else 'disabled'} (threshold={self.energy_ratio_gate_threshold})")
 
     def _ensure_model_loaded(self) -> bool:
         """Ensure the NB-Whisper model is loaded and ready."""
@@ -185,6 +191,107 @@ class SpeakerAwareTranscriptionService:
                 return True, speaker_info, "stereo_channels"
 
         return False, [], "stereo_mixed"
+
+    def _apply_energy_ratio_filtering(self, audio: AudioSegment) -> Tuple[AudioSegment, AudioSegment]:
+        """
+        Apply Method 3: Energy Ratio Filtering to separate speakers in stereo audio.
+
+        For each time window:
+        - If left_energy / right_energy > threshold (2.0): keep left, silence right
+        - If left_energy / right_energy < 1/threshold (0.5): keep right, silence left
+        - Otherwise: keep both channels (both speaking or unclear)
+
+        Args:
+            audio: Stereo AudioSegment
+
+        Returns:
+            (filtered_left_channel, filtered_right_channel)
+        """
+        if audio.channels != 2:
+            # Not stereo, return as-is
+            mono = audio.set_channels(1)
+            return mono, mono
+
+        logger.info(f"Applying energy ratio filtering (window={self.filter_window_ms}ms, threshold={self.energy_ratio_gate_threshold})")
+
+        # Split into left and right channels
+        left_channel = audio.split_to_mono()[0]
+        right_channel = audio.split_to_mono()[1]
+
+        # Convert to numpy arrays for processing
+        left_samples = np.array(left_channel.get_array_of_samples(), dtype=np.float32)
+        right_samples = np.array(right_channel.get_array_of_samples(), dtype=np.float32)
+
+        # Calculate window size in samples
+        window_size = int((self.filter_window_ms / 1000.0) * audio.frame_rate)
+
+        # Process each window
+        num_windows = int(np.ceil(len(left_samples) / window_size))
+
+        filtered_left = np.copy(left_samples)
+        filtered_right = np.copy(right_samples)
+
+        logger.info(f"Processing {num_windows} windows of {window_size} samples each")
+
+        windows_kept_left_only = 0
+        windows_kept_right_only = 0
+        windows_kept_both = 0
+
+        for i in range(num_windows):
+            start_idx = i * window_size
+            end_idx = min((i + 1) * window_size, len(left_samples))
+
+            # Get window samples
+            left_window = left_samples[start_idx:end_idx]
+            right_window = right_samples[start_idx:end_idx]
+
+            # Calculate energy (RMS) for each channel in this window
+            left_energy = np.sqrt(np.mean(left_window ** 2))
+            right_energy = np.sqrt(np.mean(right_window ** 2))
+
+            # Avoid division by zero
+            if right_energy < 1e-6:
+                right_energy = 1e-6
+            if left_energy < 1e-6:
+                left_energy = 1e-6
+
+            # Calculate energy ratio
+            energy_ratio = left_energy / right_energy
+
+            # Apply filtering based on energy ratio
+            if energy_ratio > self.energy_ratio_gate_threshold:
+                # Left channel dominates - silence right
+                filtered_right[start_idx:end_idx] = 0
+                windows_kept_left_only += 1
+            elif energy_ratio < (1.0 / self.energy_ratio_gate_threshold):
+                # Right channel dominates - silence left
+                filtered_left[start_idx:end_idx] = 0
+                windows_kept_right_only += 1
+            else:
+                # Both channels similar - keep both
+                windows_kept_both += 1
+
+        logger.info(f"Energy filtering results: {windows_kept_left_only} left-only, {windows_kept_right_only} right-only, {windows_kept_both} both")
+
+        # Convert back to AudioSegment
+        filtered_left_int = filtered_left.astype(np.int16)
+        filtered_right_int = filtered_right.astype(np.int16)
+
+        filtered_left_audio = AudioSegment(
+            filtered_left_int.tobytes(),
+            frame_rate=audio.frame_rate,
+            sample_width=audio.sample_width,
+            channels=1
+        )
+
+        filtered_right_audio = AudioSegment(
+            filtered_right_int.tobytes(),
+            frame_rate=audio.frame_rate,
+            sample_width=audio.sample_width,
+            channels=1
+        )
+
+        return filtered_left_audio, filtered_right_audio
 
     def _load_and_preprocess_audio(self, audio_file_path: str) -> Tuple[AudioSegment, float]:
         """Load audio file (MP3, M4A, WAV) and return AudioSegment."""
@@ -369,13 +476,18 @@ class SpeakerAwareTranscriptionService:
             if has_separation and len(speaker_info) == 2:
                 logger.info("Stereo separation detected - transcribing each channel separately")
 
+                # Apply energy ratio filtering if enabled
+                if self.use_energy_filtering:
+                    left_channel, right_channel = self._apply_energy_ratio_filtering(audio)
+                else:
+                    left_channel = audio.split_to_mono()[0]
+                    right_channel = audio.split_to_mono()[1]
+
                 # Transcribe left channel (Speaker 1)
-                left_channel = audio.split_to_mono()[0]
                 left_segments = self._transcribe_channel(left_channel, "speaker_1")
                 all_segments.extend(left_segments)
 
                 # Transcribe right channel (Speaker 2)
-                right_channel = audio.split_to_mono()[1]
                 right_segments = self._transcribe_channel(right_channel, "speaker_2")
                 all_segments.extend(right_segments)
 
@@ -476,5 +588,8 @@ class SpeakerAwareTranscriptionService:
             "speaker_detection": "stereo_channel_separation",
             "supported_formats": ["mp3", "m4a", "wav"],
             "correlation_threshold": self.correlation_threshold,
-            "energy_ratio_threshold": self.energy_ratio_threshold
+            "energy_ratio_threshold": self.energy_ratio_threshold,
+            "energy_filtering_enabled": self.use_energy_filtering,
+            "energy_filtering_threshold": self.energy_ratio_gate_threshold,
+            "energy_filtering_window_ms": self.filter_window_ms
         }

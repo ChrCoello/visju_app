@@ -184,23 +184,67 @@ h2 {
     font-size: 1.1rem;
 }
 
-.segment {
-    margin-bottom: 1rem;
-    padding: 1rem;
-    background: white;
-    border-left: 4px solid #3498db;
-    border-radius: 4px;
+/* Dialogue container with two columns */
+.dialogue-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1rem 0;
 }
 
-.segment-time {
-    font-size: 0.9rem;
-    color: #6c757d;
-    font-weight: 600;
+.dialogue-turn {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+.dialogue-left {
+    text-align: left;
+    padding: 1.5rem;
+    background: #e3f2fd;
+    border-radius: 12px;
+    border-left: 4px solid #3498db;
+    line-height: 1.8;
+    color: #2c3e50;
+    min-height: 20px;
+}
+
+.dialogue-left:empty {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.dialogue-right {
+    text-align: left;
+    padding: 1.5rem;
+    background: #e8f5e9;
+    border-radius: 12px;
+    border-left: 4px solid #27ae60;
+    line-height: 1.8;
+    color: #2c3e50;
+    min-height: 20px;
+}
+
+.dialogue-right:empty {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+/* Legacy segment styles (for non-speaker transcripts) */
+.segment {
     margin-bottom: 0.5rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #95a5a6;
 }
 
 .segment-text {
     line-height: 1.7;
+    color: #2c3e50;
 }
 
 /* Buttons */
@@ -287,5 +331,16 @@ h2 {
 
     h1 {
         font-size: 1.5rem;
+    }
+
+    /* Stack dialogue vertically on mobile */
+    .dialogue-turn {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .dialogue-left,
+    .dialogue-right {
+        padding: 1rem;
     }
 }

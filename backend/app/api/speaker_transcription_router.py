@@ -1,5 +1,6 @@
 """
-API routes for speaker-aware audio transcription with support for MP3, M4A, and WAV files.
+API routes for speaker-aware audio transcription with stereo channel separation.
+Supports MP3, M4A, and WAV files with automatic speaker detection for stereo recordings.
 """
 
 import uuid
@@ -16,7 +17,7 @@ from ..services.speaker_aware_transcription_service import SpeakerAwareTranscrip
 
 logger = get_logger()
 
-router = APIRouter(prefix="/transcription", tags=["transcription"])
+router = APIRouter(prefix="/speaker-aware-transcription", tags=["speaker-aware-transcription"])
 
 # Initialize speaker-aware transcription service
 speaker_transcription_service = SpeakerAwareTranscriptionService()
@@ -326,7 +327,7 @@ async def transcribe_audio_with_speakers(
         )
 
 @router.get("/status")
-async def speaker_transcription_status():
+async def speaker_aware_transcription_status():
     """Get speaker-aware transcription service status and model information."""
     try:
         model_info = speaker_transcription_service.get_model_info()

@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     # App Configuration
     APP_NAME: str = "Vidarshov Gård Recording App"
     DEBUG: bool = False
+    DEVELOPMENT_MODE: bool = True  # Set to False in production to enable caching
     
     # CORS Configuration
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
@@ -31,6 +32,9 @@ class Settings(BaseSettings):
     # File Processing Configuration
     MAX_FILE_SIZE_MB: int = 500
     SUPPORTED_AUDIO_FORMATS: List[str] = ["m4a", "mp3", "wav"]
+
+    # Transcription Configuration
+    SILENCE_INTERVAL_SECONDS: float = 7.0  # Silence gap to split speaker chunks
     
     class Config:
         env_file = ".env"

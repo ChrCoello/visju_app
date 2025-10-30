@@ -125,7 +125,12 @@ async def get_session_detail(
                 "language": transcript.language,
                 "model_version": transcript.model_version,
                 "processing_duration_ms": transcript.processing_duration_ms,
-                "created_at": transcript.created_at.isoformat()
+                "created_at": transcript.created_at.isoformat(),
+                # Speaker-aware transcription fields
+                "has_speakers": transcript.has_speakers,
+                "speakers_detected": transcript.speakers_detected,
+                "speaker_separation_method": transcript.speaker_separation_method,
+                "speaker_info": transcript.speaker_info
             }
 
         # Get metadata

@@ -51,17 +51,27 @@ templates = Jinja2Templates(directory="../frontend/templates")
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     logger.info("Root endpoint accessed")
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "dev_mode": settings.DEVELOPMENT_MODE
+    })
 
 @app.get("/sessions", response_class=HTMLResponse)
 async def sessions_view(request: Request):
     logger.info("Sessions view accessed")
-    return templates.TemplateResponse("sessions.html", {"request": request})
+    return templates.TemplateResponse("sessions.html", {
+        "request": request,
+        "dev_mode": settings.DEVELOPMENT_MODE
+    })
 
 @app.get("/sessions/{session_id}", response_class=HTMLResponse)
 async def session_detail_view(request: Request, session_id: str):
     logger.info(f"Session detail view accessed for: {session_id}")
-    return templates.TemplateResponse("session_detail.html", {"request": request, "session_id": session_id})
+    return templates.TemplateResponse("session_detail.html", {
+        "request": request,
+        "session_id": session_id,
+        "dev_mode": settings.DEVELOPMENT_MODE
+    })
 
 @app.get("/health")
 async def health_check():

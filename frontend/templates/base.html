@@ -4,7 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Vidarshov Gård Recording App{% endblock %}</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    {% if dev_mode %}
+    <!-- Development mode: Disable caching -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="/static/css/style.css?t={{ range(1, 999999) | random }}">
+    {% else %}
+    <!-- Production mode: Enable caching -->
+    <link rel="stylesheet" href="/static/css/style.css?v=2">
+    {% endif %}
 </head>
 <body>
     <header>
@@ -23,7 +32,13 @@
         </div>
     </main>
 
-    <script src="/static/js/app.js"></script>
+    {% if dev_mode %}
+    <!-- Development mode: Disable JS caching with timestamp -->
+    <script src="/static/js/app.js?t={{ range(1, 999999) | random }}"></script>
+    {% else %}
+    <!-- Production mode: Enable JS caching with version -->
+    <script src="/static/js/app.js?v=2"></script>
+    {% endif %}
     {% block scripts %}{% endblock %}
 </body>
 </html>

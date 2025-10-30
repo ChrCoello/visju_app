@@ -10,7 +10,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from pydantic import BaseModel
 from pydub import AudioSegment
 
@@ -73,14 +73,28 @@ class SpeakerAwareTranscriptionService:
         self.correlation_threshold = 0.6  # Below this = different speakers
         self.energy_ratio_threshold = 1.5  # Above this = significant channel difference
 
+        # Energy ratio filtering settings (OLD METHOD - deprecated)
+        self.use_energy_filtering = False  # Disable by default - causes significant content loss
+        self.energy_ratio_gate_threshold = 2.0  # Ratio threshold for channel selection
+        self.filter_window_ms = 100  # Window size for energy calculation (100ms)
+
+        # Option 3: Unified transcription with energy-based speaker assignment (NEW METHOD)
+        self.use_unified_transcription = True  # Transcribe mono, then assign speakers by energy
+        self.speaker_energy_threshold = 1.5  # Energy ratio threshold for speaker assignment
+        self.keep_unclear_segments = True  # Keep segments where speaker is unclear
+        self.unclear_energy_threshold = 1.5  # Below this ratio = unclear speaker
+
         self.model = None
         self.processor = None
+        self.pipe = None
 
         logger.info(f"SpeakerAwareTranscriptionService initialized with device: {self.device}")
+        logger.info(f"Unified transcription: {'enabled' if self.use_unified_transcription else 'disabled'} (energy_threshold={self.speaker_energy_threshold})")
+        logger.info(f"Energy ratio filtering (old): {'enabled' if self.use_energy_filtering else 'disabled'} (threshold={self.energy_ratio_gate_threshold})")
 
     def _ensure_model_loaded(self) -> bool:
         """Ensure the NB-Whisper model is loaded and ready."""
-        if self.model is not None and self.processor is not None:
+        if self.model is not None and self.processor is not None and self.pipe is not None:
             return True
 
         try:
@@ -96,7 +110,17 @@ class SpeakerAwareTranscriptionService:
 
             self.processor = AutoProcessor.from_pretrained(self.model_id)
 
-            logger.info("NB-Whisper model loaded successfully")
+            # Create pipeline for timestamp support
+            self.pipe = pipeline(
+                "automatic-speech-recognition",
+                model=self.model,
+                tokenizer=self.processor.tokenizer,
+                feature_extractor=self.processor.feature_extractor,
+                device=self.device,
+                torch_dtype=self.torch_dtype
+            )
+
+            logger.info("NB-Whisper model and pipeline loaded successfully")
             return True
 
         except Exception as e:
@@ -186,6 +210,107 @@ class SpeakerAwareTranscriptionService:
 
         return False, [], "stereo_mixed"
 
+    def _apply_energy_ratio_filtering(self, audio: AudioSegment) -> Tuple[AudioSegment, AudioSegment]:
+        """
+        Apply Method 3: Energy Ratio Filtering to separate speakers in stereo audio.
+
+        For each time window:
+        - If left_energy / right_energy > threshold (2.0): keep left, silence right
+        - If left_energy / right_energy < 1/threshold (0.5): keep right, silence left
+        - Otherwise: keep both channels (both speaking or unclear)
+
+        Args:
+            audio: Stereo AudioSegment
+
+        Returns:
+            (filtered_left_channel, filtered_right_channel)
+        """
+        if audio.channels != 2:
+            # Not stereo, return as-is
+            mono = audio.set_channels(1)
+            return mono, mono
+
+        logger.info(f"Applying energy ratio filtering (window={self.filter_window_ms}ms, threshold={self.energy_ratio_gate_threshold})")
+
+        # Split into left and right channels
+        left_channel = audio.split_to_mono()[0]
+        right_channel = audio.split_to_mono()[1]
+
+        # Convert to numpy arrays for processing
+        left_samples = np.array(left_channel.get_array_of_samples(), dtype=np.float32)
+        right_samples = np.array(right_channel.get_array_of_samples(), dtype=np.float32)
+
+        # Calculate window size in samples
+        window_size = int((self.filter_window_ms / 1000.0) * audio.frame_rate)
+
+        # Process each window
+        num_windows = int(np.ceil(len(left_samples) / window_size))
+
+        filtered_left = np.copy(left_samples)
+        filtered_right = np.copy(right_samples)
+
+        logger.info(f"Processing {num_windows} windows of {window_size} samples each")
+
+        windows_kept_left_only = 0
+        windows_kept_right_only = 0
+        windows_kept_both = 0
+
+        for i in range(num_windows):
+            start_idx = i * window_size
+            end_idx = min((i + 1) * window_size, len(left_samples))
+
+            # Get window samples
+            left_window = left_samples[start_idx:end_idx]
+            right_window = right_samples[start_idx:end_idx]
+
+            # Calculate energy (RMS) for each channel in this window
+            left_energy = np.sqrt(np.mean(left_window ** 2))
+            right_energy = np.sqrt(np.mean(right_window ** 2))
+
+            # Avoid division by zero
+            if right_energy < 1e-6:
+                right_energy = 1e-6
+            if left_energy < 1e-6:
+                left_energy = 1e-6
+
+            # Calculate energy ratio
+            energy_ratio = left_energy / right_energy
+
+            # Apply filtering based on energy ratio
+            if energy_ratio > self.energy_ratio_gate_threshold:
+                # Left channel dominates - silence right
+                filtered_right[start_idx:end_idx] = 0
+                windows_kept_left_only += 1
+            elif energy_ratio < (1.0 / self.energy_ratio_gate_threshold):
+                # Right channel dominates - silence left
+                filtered_left[start_idx:end_idx] = 0
+                windows_kept_right_only += 1
+            else:
+                # Both channels similar - keep both
+                windows_kept_both += 1
+
+        logger.info(f"Energy filtering results: {windows_kept_left_only} left-only, {windows_kept_right_only} right-only, {windows_kept_both} both")
+
+        # Convert back to AudioSegment
+        filtered_left_int = filtered_left.astype(np.int16)
+        filtered_right_int = filtered_right.astype(np.int16)
+
+        filtered_left_audio = AudioSegment(
+            filtered_left_int.tobytes(),
+            frame_rate=audio.frame_rate,
+            sample_width=audio.sample_width,
+            channels=1
+        )
+
+        filtered_right_audio = AudioSegment(
+            filtered_right_int.tobytes(),
+            frame_rate=audio.frame_rate,
+            sample_width=audio.sample_width,
+            channels=1
+        )
+
+        return filtered_left_audio, filtered_right_audio
+
     def _load_and_preprocess_audio(self, audio_file_path: str) -> Tuple[AudioSegment, float]:
         """Load audio file (MP3, M4A, WAV) and return AudioSegment."""
         audio_path = Path(audio_file_path)
@@ -198,53 +323,191 @@ class SpeakerAwareTranscriptionService:
         return audio, duration
 
     def _transcribe_channel(self, audio_channel: AudioSegment, speaker_id: str) -> List[SpeakerSegment]:
-        """Transcribe a single audio channel and return speaker segments."""
+        """Transcribe a single audio channel and return speaker segments with word-level timestamps."""
         try:
             # Convert channel to proper format for NB-Whisper
             audio_mono = audio_channel.set_frame_rate(self.sample_rate).set_channels(1).set_sample_width(2)
 
-            # Create chunks for long audio
-            chunks = self._create_audio_chunks_from_segment(audio_mono)
+            # Convert to numpy array
+            audio_array = np.array(audio_mono.get_array_of_samples(), dtype=np.float32)
+
+            # Normalize to [-1, 1] range
+            if audio_mono.sample_width == 2:
+                audio_array = audio_array / 32768.0
+            elif audio_mono.sample_width == 4:
+                audio_array = audio_array / 2147483648.0
+
+            logger.info(f"Transcribing {speaker_id} with word-level timestamps (duration: {len(audio_mono)/1000.0:.1f}s)")
+
+            # Use pipeline with word-level timestamps
+            result = self.pipe(
+                audio_array,
+                return_timestamps="word",
+                generate_kwargs={
+                    "language": "no",
+                    "task": "transcribe"
+                }
+            )
+
             segments = []
 
-            for i, (chunk_audio, start_time, end_time) in enumerate(chunks):
-                logger.info(f"Transcribing {speaker_id} chunk {i+1}/{len(chunks)} ({start_time:.1f}s - {end_time:.1f}s)")
+            if "chunks" in result:
+                # Process word-level chunks
+                for chunk in result["chunks"]:
+                    text = chunk.get("text", "").strip()
+                    timestamp = chunk.get("timestamp", (0.0, 0.0))
 
-                # Convert AudioSegment to numpy array
-                chunk_array = np.array(chunk_audio.get_array_of_samples(), dtype=np.float32)
+                    if text and timestamp:
+                        start_time = timestamp[0] if timestamp[0] is not None else 0.0
+                        end_time = timestamp[1] if timestamp[1] is not None else start_time + 1.0
 
-                # Normalize to [-1, 1] range
-                if chunk_audio.sample_width == 2:
-                    chunk_array = chunk_array / 32768.0
-                elif chunk_audio.sample_width == 4:
-                    chunk_array = chunk_array / 2147483648.0
-
-                chunk_text = self._transcribe_chunk(chunk_array)
-
-                if chunk_text.strip():
-                    # Remove overlap text from previous chunk
-                    if i > 0 and segments:
-                        prev_words = segments[-1].text.split()[-3:]
-                        chunk_words = chunk_text.split()
-
-                        for j in range(min(len(prev_words), len(chunk_words))):
-                            if prev_words[-j-1:] == chunk_words[:j+1]:
-                                chunk_text = " ".join(chunk_words[j+1:])
-                                break
-
-                    if chunk_text.strip():
                         segments.append(SpeakerSegment(
-                            text=chunk_text,
+                            text=text,
                             start_time=start_time,
                             end_time=end_time,
                             speaker_id=speaker_id
                         ))
 
-            return segments
+            logger.info(f"Extracted {len(segments)} word-level segments for {speaker_id}")
+
+            # Merge word segments into silence-based chunks
+            merged_segments = self._merge_segments_by_silence(segments)
+            logger.info(f"Merged into {len(merged_segments)} silence-based chunks for {speaker_id}")
+
+            return merged_segments
 
         except Exception as e:
             logger.error(f"Failed to transcribe channel for {speaker_id}: {e}")
             return []
+
+    def _merge_segments_by_silence(self, word_segments: List[SpeakerSegment]) -> List[SpeakerSegment]:
+        """
+        Merge word-level segments into larger chunks based on silence intervals.
+
+        A chunk continues as long as the gap between consecutive words is less than
+        SILENCE_INTERVAL_SECONDS. When a silence > threshold is detected, a new chunk starts.
+
+        Args:
+            word_segments: List of word-level SpeakerSegment objects
+
+        Returns:
+            List of merged SpeakerSegment objects (chunks)
+        """
+        if not word_segments:
+            return []
+
+        silence_threshold = self.settings.SILENCE_INTERVAL_SECONDS
+        merged_chunks = []
+
+        current_chunk_words = []
+        current_chunk_start = None
+        current_chunk_end = None
+        current_speaker = None
+
+        for segment in word_segments:
+            # Initialize first chunk
+            if current_chunk_start is None:
+                current_chunk_words.append(segment.text)
+                current_chunk_start = segment.start_time
+                current_chunk_end = segment.end_time
+                current_speaker = segment.speaker_id
+                continue
+
+            # Calculate silence gap between previous segment and current
+            silence_gap = segment.start_time - current_chunk_end
+
+            # If silence gap exceeds threshold, finish current chunk and start new one
+            if silence_gap > silence_threshold:
+                # Create merged chunk from accumulated words
+                merged_chunks.append(SpeakerSegment(
+                    text=" ".join(current_chunk_words),
+                    start_time=current_chunk_start,
+                    end_time=current_chunk_end,
+                    speaker_id=current_speaker
+                ))
+
+                # Start new chunk
+                current_chunk_words = [segment.text]
+                current_chunk_start = segment.start_time
+                current_chunk_end = segment.end_time
+                current_speaker = segment.speaker_id
+            else:
+                # Continue current chunk
+                current_chunk_words.append(segment.text)
+                current_chunk_end = segment.end_time
+
+        # Add final chunk
+        if current_chunk_words:
+            merged_chunks.append(SpeakerSegment(
+                text=" ".join(current_chunk_words),
+                start_time=current_chunk_start,
+                end_time=current_chunk_end,
+                speaker_id=current_speaker
+            ))
+
+        return merged_chunks
+
+    def _assign_speaker_by_energy(
+        self,
+        segment: SpeakerSegment,
+        left_channel: AudioSegment,
+        right_channel: AudioSegment
+    ) -> str:
+        """
+        Assign speaker based on which channel has dominant energy during the segment.
+
+        This is the core of Option 3: Instead of transcribing each channel separately,
+        we transcribe the full mono audio and then determine which speaker said each
+        segment by comparing the energy levels in the left vs right channels.
+
+        Args:
+            segment: Transcribed segment with start_time and end_time
+            left_channel: Left audio channel (Speaker 1's microphone)
+            right_channel: Right audio channel (Speaker 2's microphone)
+
+        Returns:
+            "speaker_1" (left channel dominant)
+            "speaker_2" (right channel dominant)
+            "speaker_unclear" (both channels have similar energy)
+        """
+        try:
+            # Extract audio slice for this segment's time range
+            start_ms = int(segment.start_time * 1000)
+            end_ms = int(segment.end_time * 1000)
+
+            # Ensure we don't go beyond audio length
+            start_ms = max(0, start_ms)
+            end_ms = min(end_ms, len(left_channel))
+
+            # Extract the segment from both channels
+            left_slice = left_channel[start_ms:end_ms]
+            right_slice = right_channel[start_ms:end_ms]
+
+            # Calculate RMS energy for each channel
+            left_energy = left_slice.rms
+            right_energy = right_slice.rms
+
+            # Avoid division by zero
+            if right_energy < 1:
+                right_energy = 1
+            if left_energy < 1:
+                left_energy = 1
+
+            # Calculate energy ratios
+            left_to_right = left_energy / right_energy
+            right_to_left = right_energy / left_energy
+
+            # Assign speaker based on energy dominance
+            if left_to_right > self.speaker_energy_threshold:
+                return "speaker_1"  # Left channel (Speaker 1's mic) is dominant
+            elif right_to_left > self.speaker_energy_threshold:
+                return "speaker_2"  # Right channel (Speaker 2's mic) is dominant
+            else:
+                return "speaker_unclear"  # Both channels have similar energy
+
+        except Exception as e:
+            logger.warning(f"Error assigning speaker by energy: {e}")
+            return "speaker_unclear"
 
     def _create_audio_chunks_from_segment(self, audio: AudioSegment) -> List[Tuple[AudioSegment, float, float]]:
         """Create overlapping chunks from AudioSegment."""
@@ -367,19 +630,59 @@ class SpeakerAwareTranscriptionService:
             chunks_processed = 0
 
             if has_separation and len(speaker_info) == 2:
-                logger.info("Stereo separation detected - transcribing each channel separately")
+                # Stereo recording detected - use unified transcription with energy-based assignment
+                if self.use_unified_transcription:
+                    logger.info("Stereo separation detected - using unified transcription with energy-based speaker assignment")
 
-                # Transcribe left channel (Speaker 1)
-                left_channel = audio.split_to_mono()[0]
-                left_segments = self._transcribe_channel(left_channel, "speaker_1")
-                all_segments.extend(left_segments)
+                    # Split channels for energy analysis (but don't transcribe separately)
+                    left_channel = audio.split_to_mono()[0]
+                    right_channel = audio.split_to_mono()[1]
 
-                # Transcribe right channel (Speaker 2)
-                right_channel = audio.split_to_mono()[1]
-                right_segments = self._transcribe_channel(right_channel, "speaker_2")
-                all_segments.extend(right_segments)
+                    # Transcribe MONO (merged) to get all content without duplicates
+                    mono_audio = audio.set_channels(1)
+                    mono_segments = self._transcribe_channel(mono_audio, "speaker_unknown")
 
-                chunks_processed = len(left_segments) + len(right_segments)
+                    # Assign speakers based on energy in each segment
+                    logger.info(f"Assigning speakers to {len(mono_segments)} segments based on channel energy")
+                    for segment in mono_segments:
+                        speaker_id = self._assign_speaker_by_energy(segment, left_channel, right_channel)
+                        segment.speaker_id = speaker_id
+
+                    # Filter out unclear segments if configured
+                    if not self.keep_unclear_segments:
+                        original_count = len(mono_segments)
+                        mono_segments = [s for s in mono_segments if s.speaker_id != "speaker_unclear"]
+                        filtered_count = original_count - len(mono_segments)
+                        if filtered_count > 0:
+                            logger.info(f"Filtered out {filtered_count} unclear segments (keep_unclear_segments=False)")
+
+                    all_segments.extend(mono_segments)
+                    chunks_processed = len(mono_segments)
+
+                    # Update speaker info with detection method
+                    for sp_info in speaker_info:
+                        sp_info.label = sp_info.label + " (energy-based)"
+
+                else:
+                    # OLD METHOD: Transcribe each channel separately (can create duplicates)
+                    logger.info("Stereo separation detected - transcribing each channel separately (OLD METHOD)")
+
+                    # Apply energy ratio filtering if enabled
+                    if self.use_energy_filtering:
+                        left_channel, right_channel = self._apply_energy_ratio_filtering(audio)
+                    else:
+                        left_channel = audio.split_to_mono()[0]
+                        right_channel = audio.split_to_mono()[1]
+
+                    # Transcribe left channel (Speaker 1)
+                    left_segments = self._transcribe_channel(left_channel, "speaker_1")
+                    all_segments.extend(left_segments)
+
+                    # Transcribe right channel (Speaker 2)
+                    right_segments = self._transcribe_channel(right_channel, "speaker_2")
+                    all_segments.extend(right_segments)
+
+                    chunks_processed = len(left_segments) + len(right_segments)
 
             else:
                 logger.info("No speaker separation detected - transcribing as mono")
@@ -458,7 +761,18 @@ class SpeakerAwareTranscriptionService:
         for segment in segments:
             if segment.speaker_id != current_speaker:
                 current_speaker = segment.speaker_id
-                speaker_label = "Speaker 1" if segment.speaker_id == "speaker_1" else "Speaker 2" if segment.speaker_id == "speaker_2" else "Speaker"
+                # Map speaker IDs to readable labels
+                if segment.speaker_id == "speaker_1":
+                    speaker_label = "Speaker 1"
+                elif segment.speaker_id == "speaker_2":
+                    speaker_label = "Speaker 2"
+                elif segment.speaker_id == "speaker_unclear":
+                    speaker_label = "Speaker (unclear)"
+                elif segment.speaker_id == "speaker_unknown":
+                    speaker_label = "Speaker"
+                else:
+                    speaker_label = segment.speaker_id
+
                 text_parts.append(f"\n\n[{speaker_label}]: {segment.text}")
             else:
                 text_parts.append(f" {segment.text}")
@@ -473,8 +787,17 @@ class SpeakerAwareTranscriptionService:
             "torch_dtype": str(self.torch_dtype),
             "model_loaded": self.model is not None,
             "cuda_available": torch.cuda.is_available(),
-            "speaker_detection": "stereo_channel_separation",
+            "speaker_detection": "unified_transcription_with_energy_assignment" if self.use_unified_transcription else "stereo_channel_separation",
             "supported_formats": ["mp3", "m4a", "wav"],
             "correlation_threshold": self.correlation_threshold,
-            "energy_ratio_threshold": self.energy_ratio_threshold
+            "energy_ratio_threshold": self.energy_ratio_threshold,
+            # Old method (deprecated)
+            "energy_filtering_enabled": self.use_energy_filtering,
+            "energy_filtering_threshold": self.energy_ratio_gate_threshold,
+            "energy_filtering_window_ms": self.filter_window_ms,
+            # New method (Option 3)
+            "unified_transcription_enabled": self.use_unified_transcription,
+            "speaker_energy_threshold": self.speaker_energy_threshold,
+            "keep_unclear_segments": self.keep_unclear_segments,
+            "unclear_energy_threshold": self.unclear_energy_threshold
         }

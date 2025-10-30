@@ -54,6 +54,13 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+    "ignore::FutureWarning",
+    # Show warnings from your own code
+    "default:::backend",
+]
 
 [tool.coverage.run]
 source = ["backend/app"]
